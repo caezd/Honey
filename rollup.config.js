@@ -1,11 +1,12 @@
+import { nodeResolve } from "@rollup/plugin-node-resolve";
+/* import commonjs from "@rollup/plugin-commonjs"; */
+
 export default {
-    input: 'src/main.js',
+    input: "src/main.js",
     output: {
-        file: 'dist/switcheroo.js',
-        format: 'iife',
-        globals: {
-            jquery: '$'
-          }
+        file: "dist/main.js",
+        format: "umd",
+        name: "Honey",
     },
-    external: ['jquery']
+    plugins: [nodeResolve({ browser: true })],
 };

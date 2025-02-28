@@ -1,16 +1,21 @@
 {
-  "name": "projectboilerplate",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "build": "rollup --config --name %npm_package_outputname%",
-    "serve": "http-server ./dist/"
-  },
-  "outputname": "App",
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "@rollup/plugin-node-resolve": "^13.0.5"
-  }
+    "name": "honey",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+        "watch": "rollup -c -w",
+        "serve": "http-server ./dist/"
+    },
+    "author": "",
+    "license": "ISC",
+    "devDependencies": {
+        "@rollup/plugin-commonjs": "^26.0.1",
+        "@rollup/plugin-node-resolve": "^13.3.0",
+        "rollup-plugin-polyfill-node": "^0.13.0",
+        "rollup-plugin-serve": "^1.1.1"
+    },
+    "dependencies": {
+        "@poumon/potion": "^1.4.8"
+    }
 }
