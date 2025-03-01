@@ -1,5 +1,4 @@
 {
-<<<<<<< HEAD
     "name": "honey",
     "version": "1.0.0",
     "description": "",
@@ -19,21 +18,4 @@
     "dependencies": {
         "@poumon/potion": "^1.4.8"
     }
-=======
-  "name": "projectboilerplate",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "build": "rollup --config --name %npm_package_outputname%",
-    "serve": "http-server ./dist/"
-  },
-  "outputname": "App",
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "@rollup/plugin-node-resolve": "^13.0.5",
-    "rollup-plugin-uglify": "^6.0.4"
-  }
->>>>>>> 02ddcc05f22dd13d26696fdf6915ea94c69a1aa8
 }
