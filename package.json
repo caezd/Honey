@@ -10,12 +10,13 @@
     "author": "",
     "license": "ISC",
     "devDependencies": {
-        "@rollup/plugin-commonjs": "^26.0.1",
+        "@rollup/plugin-commonjs": "^26.0.3",
         "@rollup/plugin-node-resolve": "^13.3.0",
-        "rollup-plugin-polyfill-node": "^0.13.0",
-        "rollup-plugin-serve": "^1.1.1"
+        "@rollup/plugin-terser": "^0.4.4",
+        "rollup-plugin-node-resolve": "^5.2.0",
+        "rollup-plugin-peer-deps-external": "^2.2.4"
     },
     "dependencies": {
-        "@poumon/potion": "^1.4.8"
+        "@poumon/potion": "^1.4.10"
     }
 }

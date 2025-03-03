@@ -1,8 +1,5 @@
-(function (global, factory) {
-    typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory() :
-    typeof define === 'function' && define.amd ? define(factory) :
-    (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Honey = factory());
-})(this, (function () { 'use strict';
+var Honey = (function () {
+    'use strict';
 
     /**
      * @module filters
@@ -54,8 +51,21 @@
             }
             dataLookup = dataLookup[path[i]];
         }
+        if (dataLookup instanceof HTMLElement) {
+            return dataLookup.outerHTML;
+        }
         return dataLookup;
     });
+
+    addFilter("uppercase", (value) =>
+        typeof value === "string" ? value.toUpperCase() : value
+    );
+    addFilter("uppercase", (value) =>
+        typeof value === "string" ? value.toLowerCase() : value
+    );
+    addFilter("trim", (value) =>
+        typeof value === "string" ? value.trim() : value
+    );
 
     /**
      * @module utils
@@ -192,25 +202,32 @@
 
         while (index < tokens.length) {
             const segment = tokens[index];
+
             if (segment.type === "static") {
                 output += segment.value;
                 index++;
             } else if (segment.type === "token") {
-                // Si c'est un token de fermeture, on l'ignore
+                // Ignore le token de fermeture
                 if (segment.flag === "/") {
                     index++;
                     continue;
                 }
-                // Chercher le bloc correspondant (token de fermeture avec le même value)
+
+                // Découpe la valeur du token pour extraire la clé et la chaîne de filtres
+                const parts = segment.value.split("|").map((s) => s.trim());
+                const tokenKey = parts[0];
+
+                // Recherche d'un bloc de fermeture associé (pour les blocs conditionnels ou les boucles)
                 let innerTokens = [];
                 let j = index + 1;
                 let foundClosing = false;
                 while (j < tokens.length) {
                     const nextSegment = tokens[j];
+                    // Pour la fermeture, on compare uniquement la clé sans filtres
                     if (
                         nextSegment.type === "token" &&
                         nextSegment.flag === "/" &&
-                        nextSegment.value === segment.value
+                        nextSegment.value.trim() === tokenKey
                     ) {
                         foundClosing = true;
                         break;
@@ -218,30 +235,36 @@
                     innerTokens.push(nextSegment);
                     j++;
                 }
+
                 let substituted;
                 try {
-                    substituted = applyFilter(
-                        "token",
-                        segment.value,
-                        data,
-                        template
-                    );
+                    // On récupère la valeur initiale du token via le filtre par défaut "token"
+                    substituted = applyFilter("token", tokenKey, data, template);
                 } catch (e) {
                     console.warn(e.message);
                     substituted = "";
                 }
+
+                // Si des filtres additionnels sont présents, on les applique successivement
+                for (let i = 1; i < parts.length; i++) {
+                    substituted = applyFilter(
+                        parts[i],
+                        substituted,
+                        data,
+                        template
+                    );
+                }
+
                 if (foundClosing) {
-                    // Reconstituer le contenu du bloc à partir des innerTokens
+                    // Cas d'un bloc
                     const innerTemplate = innerTokens
-                        .map((tok) => {
-                            if (tok.type === "static") {
-                                return tok.value;
-                            } else {
-                                return `${settings.start}${
-                                tok.flag ? tok.flag : ""
-                            }${tok.value}${settings.end}`;
-                            }
-                        })
+                        .map((tok) =>
+                            tok.type === "static"
+                                ? tok.value
+                                : `${settings.start}${tok.flag ? tok.flag : ""}${
+                                  tok.value
+                              }${settings.end}`
+                        )
                         .join("");
 
                     if (typeof substituted === "boolean") {
@@ -249,10 +272,9 @@
                             ? substitute(innerTemplate, data, settings)
                             : "";
                     } else if (typeof substituted === "object") {
-                        // Cas de boucle : substitution pour chaque clé de l'objet
+                        // Cas de boucle (itération sur un objet)
                         for (const key in substituted) {
                             if (substituted.hasOwnProperty(key)) {
-                                // Construire les données locales pour cette itération
                                 const loopData = Object.assign(
                                     {},
                                     substituted[key],
@@ -261,17 +283,13 @@
                                         _value: substituted[key],
                                     }
                                 );
-                                // Rendu du bloc pour cette itération (récursivité sur le innerTemplate)
                                 let renderedBlock = substitute(
                                     innerTemplate,
                                     loopData,
                                     settings
                                 ).trim();
-                                // Générer un identifiant unique
                                 const uniqueId = "potion_" + uniqueCounter++;
-                                // Stocker le contexte local dans la Map
                                 localContexts.set(uniqueId, loopData);
-                                // Injecter data-potion-key dans la première balise du rendu
                                 renderedBlock = renderedBlock.replace(
                                     /^\s*<([a-zA-Z0-9-]+)/,
                                     `<$1 data-potion-key="${uniqueId}"`
@@ -284,7 +302,7 @@
                     }
                     index = j + 1; // Passer après le token de fermeture
                 } else {
-                    // Pas de bloc trouvé : substitution simple
+                    // Cas de substitution simple
                     output += substituted;
                     index++;
                 }
@@ -573,7 +591,7 @@
     const defaultSettings = {
         start: "[",
         end: "]",
-        path: "[a-z0-9_$][\\.a-z0-9_]*",
+        path: "[^\\]]+",
         type: "template/potion",
         attr: "data-name",
         tag: "div",
@@ -746,6 +764,15 @@
         return a;
     };
 
+    function escapeHTML(str) {
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
     const slugify = (text) =>
         text
             .toString()
@@ -756,6 +783,16 @@
             .replace(/\s+/g, "-")
             .replace(/[^\w-]+/g, "")
             .replace(/--+/g, "-");
+
+    const getNumbersFromText = (text) => {
+        return text.replace(/\D/g, "");
+    };
+
+    const get_res_type = (p) => {
+        var m = p.match(/\/([tfc])[1-9][0-9]*/);
+        if (!m) return "";
+        return m[1];
+    };
 
     const get_res_id = (p) => {
         var m = p.match(/\/[tfc]([1-9][0-9]*)(p[1-9][0-9]*)?-/);
@@ -768,8 +805,432 @@
         const obj = {};
         arr.forEach((item) => {
             const elem = el.querySelector(`var[title="${item}"]`);
-            if (elem) obj[item] = elem.innerHTML;
+            const name = item.split("_")[1] || item;
+            if (elem) obj[name] = elem.innerHTML;
         });
+        return obj;
+    };
+
+    const getLinkAndImage = (el, name) => {
+        const link = el.querySelector("a");
+        if (!link) return null;
+        const obj = {};
+        obj[name] = {
+            url: link.href,
+        };
+        getStrictImg(el)
+            ? (obj[name].img = getStrictImg(el))
+            : (obj[name].text = link.innerHTML);
+        return obj;
+    };
+
+    const extractLinkAndImage = (el, label) => {
+        const fields = el.querySelectorAll(`[title^="${label}"]`);
+        const fieldObj = {};
+        fields.forEach((field) => {
+            const title = field.getAttribute("title");
+            const obj = getLinkAndImage(field, title);
+            if (obj) {
+                fieldObj[title.split("_")[1]] = obj[title];
+            }
+        });
+        return fieldObj;
+    };
+
+    const getStrictText = (el) => {
+        if (!el.textContent) return;
+        return el.textContent.trim();
+    };
+
+    const getStrictImg = (el) => {
+        const img = el.querySelector("img");
+        if (!img) return null;
+        const obj = {
+            src: img.src,
+            element: img,
+        };
+        return obj;
+    };
+
+    function parseUserDate(dateStr) {
+        // Nettoyage initial : suppression des espaces en début/fin,
+        // suppression du jour de la semaine (ex: "Sam", "Dim", etc.) et des suffixes ordinaux (st, nd, rd, th)
+        dateStr = dateStr
+            .trim()
+            .replace(/^(?:[A-Za-zéûÀ-ÖØ-öø-ÿ]{3,4}\s+)/, "")
+            .replace(/(\d+)(st|nd|rd|th)/gi, "$1");
+
+        // Liste des patterns à tester
+        const patterns = [
+            // "D j M Y - G:i" => "Sam 1 Mar 2025 - 22:48"
+            {
+                regex: /^(\d{1,2})\s+([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{4})\s*[-,]\s*(\d{1,2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[2]),
+                        parseInt(m[1], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10)
+                    ),
+            },
+            // "D j M - G:i" => "Sam 1 Mar - 22:48" (on assume l'année en cours)
+            {
+                regex: /^(\d{1,2})\s+([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s*[-,]\s*(\d{1,2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        new Date().getFullYear(),
+                        parseMonth(m[2]),
+                        parseInt(m[1], 10),
+                        parseInt(m[3], 10),
+                        parseInt(m[4], 10)
+                    ),
+            },
+            // "D j M Y - G:i:s" => "Sam 1 Mar 2025 - 22:48:44"
+            {
+                regex: /^(\d{1,2})\s+([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{4})\s*[-,]\s*(\d{1,2}):(\d{2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[2]),
+                        parseInt(m[1], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10),
+                        parseInt(m[6], 10)
+                    ),
+            },
+            // "D j M Y - H:i:s a" => "Sam 1 Mar 2025 - 22:48:44 pm"
+            {
+                regex: /^(\d{1,2})\s+([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{4})\s*[-,]\s*(\d{1,2}):(\d{2}):(\d{2})\s*([ap]m)$/i,
+                process: (m) => {
+                    let hour = parseInt(m[4], 10);
+                    const ampm = m[7].toLowerCase();
+                    if (ampm === "pm" && hour < 12) hour += 12;
+                    if (ampm === "am" && hour === 12) hour = 0;
+                    return new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[2]),
+                        parseInt(m[1], 10),
+                        hour,
+                        parseInt(m[5], 10),
+                        parseInt(m[6], 10)
+                    );
+                },
+            },
+            // "d.m.y G:i" => "01.03.25 22:48"
+            {
+                regex: /^(\d{2})\.(\d{2})\.(\d{2})\s+(\d{1,2}):(\d{2})$/,
+                process: (m) => {
+                    let yr = parseInt(m[3], 10);
+                    yr += yr < 50 ? 2000 : 1900;
+                    return new Date(
+                        yr,
+                        parseInt(m[2], 10) - 1,
+                        parseInt(m[1], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10)
+                    );
+                },
+            },
+            // "d/m/y, h:i a" => "01/03/25, 10:48 pm"
+            {
+                regex: /^(\d{2})\/(\d{2})\/(\d{2}),\s*(\d{1,2}):(\d{2})\s*([ap]m)$/i,
+                process: (m) => {
+                    let yr = parseInt(m[3], 10);
+                    yr += yr < 50 ? 2000 : 1900;
+                    let hour = parseInt(m[4], 10);
+                    const ampm = m[6].toLowerCase();
+                    if (ampm === "pm" && hour < 12) hour += 12;
+                    if (ampm === "am" && hour === 12) hour = 0;
+                    return new Date(
+                        yr,
+                        parseInt(m[2], 10) - 1,
+                        parseInt(m[1], 10),
+                        hour,
+                        parseInt(m[5], 10)
+                    );
+                },
+            },
+            // "D d M Y, g:i a" => "Sam 01 Mar 2025, 10:48 pm"
+            {
+                regex: /^(\d{1,2})\s+([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{4}),\s*(\d{1,2}):(\d{2})\s*([ap]m)$/i,
+                process: (m) => {
+                    let hour = parseInt(m[4], 10);
+                    const ampm = m[6].toLowerCase();
+                    if (ampm === "pm" && hour < 12) hour += 12;
+                    if (ampm === "am" && hour === 12) hour = 0;
+                    return new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[2]),
+                        parseInt(m[1], 10),
+                        hour,
+                        parseInt(m[5], 10)
+                    );
+                },
+            },
+            // "D d M Y, H:i" => "Sam 01 Mar 2025, 22:48"
+            {
+                regex: /^(\d{1,2})\s+([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{4}),\s*(\d{1,2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[2]),
+                        parseInt(m[1], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10)
+                    ),
+            },
+            // "D M d, Y g:i a" => "Sam Mar 01, 2025 10:48 pm"
+            {
+                regex: /^([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{1,2}),\s*(\d{4})\s+(\d{1,2}):(\d{2})\s*([ap]m)$/i,
+                process: (m) => {
+                    let hour = parseInt(m[4], 10);
+                    const ampm = m[6].toLowerCase();
+                    if (ampm === "pm" && hour < 12) hour += 12;
+                    if (ampm === "am" && hour === 12) hour = 0;
+                    return new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[1]),
+                        parseInt(m[2], 10),
+                        hour,
+                        parseInt(m[5], 10)
+                    );
+                },
+            },
+            // "D M d Y, H:i" => "Sam Mar 01 2025, 22:48"
+            {
+                regex: /^([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{1,2})\s+(\d{4}),\s*(\d{1,2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[1]),
+                        parseInt(m[2], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10)
+                    ),
+            },
+            // "jS F Y, g:i a" => "1st Mars 2025, 10:48 pm"
+            {
+                regex: /^(\d{1,2})\s+[a-z]{2}\s+([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{4}),\s*(\d{1,2}):(\d{2})\s*([ap]m)$/i,
+                process: (m) => {
+                    let hour = parseInt(m[4], 10);
+                    const ampm = m[6].toLowerCase();
+                    if (ampm === "pm" && hour < 12) hour += 12;
+                    if (ampm === "am" && hour === 12) hour = 0;
+                    return new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[2]),
+                        parseInt(m[1], 10),
+                        hour,
+                        parseInt(m[5], 10)
+                    );
+                },
+            },
+            // "jS F Y, H:i" => "1st Mars 2025, 22:48"
+            {
+                regex: /^(\d{1,2})\s+[a-z]{2}\s+([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{4}),\s*(\d{1,2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[2]),
+                        parseInt(m[1], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10)
+                    ),
+            },
+            // "F jS Y, g:i a" => "Mars 1st 2025, 10:48 pm"
+            {
+                regex: /^([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{1,2})\s*[a-z]{2}\s+(\d{4}),\s*(\d{1,2}):(\d{2})\s*([ap]m)$/i,
+                process: (m) => {
+                    let hour = parseInt(m[4], 10);
+                    const ampm = m[6].toLowerCase();
+                    if (ampm === "pm" && hour < 12) hour += 12;
+                    if (ampm === "am" && hour === 12) hour = 0;
+                    return new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[1]),
+                        parseInt(m[2], 10),
+                        hour,
+                        parseInt(m[5], 10)
+                    );
+                },
+            },
+            // "F jS Y, H:i" => "Mars 1st 2025, 22:48"
+            {
+                regex: /^([A-Za-zéûÀ-ÖØ-öø-ÿ]+)\s+(\d{1,2})\s*[a-z]{2}\s+(\d{4}),\s*(\d{1,2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[3], 10),
+                        parseMonth(m[1]),
+                        parseInt(m[2], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10)
+                    ),
+            },
+            // "j/n/Y, g:i a" => "1/3/2025, 10:48 pm"
+            {
+                regex: /^(\d{1,2})\/(\d{1,2})\/(\d{4}),\s*(\d{1,2}):(\d{2})\s*([ap]m)$/i,
+                process: (m) => {
+                    let hour = parseInt(m[4], 10);
+                    const ampm = m[6].toLowerCase();
+                    if (ampm === "pm" && hour < 12) hour += 12;
+                    if (ampm === "am" && hour === 12) hour = 0;
+                    return new Date(
+                        parseInt(m[3], 10),
+                        parseInt(m[2], 10) - 1,
+                        parseInt(m[1], 10),
+                        hour,
+                        parseInt(m[5], 10)
+                    );
+                },
+            },
+            // "j/n/Y, H:i" => "1/3/2025, 22:48"
+            {
+                regex: /^(\d{1,2})\/(\d{1,2})\/(\d{4}),\s*(\d{1,2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[3], 10),
+                        parseInt(m[2], 10) - 1,
+                        parseInt(m[1], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10)
+                    ),
+            },
+            // "n/j/Y, g:i a" => "3/1/2025, 10:48 pm"
+            {
+                regex: /^(\d{1,2})\/(\d{1,2})\/(\d{4}),\s*(\d{1,2}):(\d{2})\s*([ap]m)$/i,
+                process: (m) => {
+                    let hour = parseInt(m[4], 10);
+                    const ampm = m[6].toLowerCase();
+                    if (ampm === "pm" && hour < 12) hour += 12;
+                    if (ampm === "am" && hour === 12) hour = 0;
+                    return new Date(
+                        parseInt(m[3], 10),
+                        parseInt(m[1], 10) - 1,
+                        parseInt(m[2], 10),
+                        hour,
+                        parseInt(m[5], 10)
+                    );
+                },
+            },
+            // "n/j/Y, H:i" => "3/1/2025, 22:48"
+            {
+                regex: /^(\d{1,2})\/(\d{1,2})\/(\d{4}),\s*(\d{1,2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[3], 10),
+                        parseInt(m[1], 10) - 1,
+                        parseInt(m[2], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10)
+                    ),
+            },
+            // "Y-m-d, g:i a" => "2025-03-01, 10:48 pm"
+            {
+                regex: /^(\d{4})-(\d{1,2})-(\d{1,2}),\s*(\d{1,2}):(\d{2})\s*([ap]m)$/i,
+                process: (m) => {
+                    let hour = parseInt(m[4], 10);
+                    const ampm = m[6].toLowerCase();
+                    if (ampm === "pm" && hour < 12) hour += 12;
+                    if (ampm === "am" && hour === 12) hour = 0;
+                    return new Date(
+                        parseInt(m[1], 10),
+                        parseInt(m[2], 10) - 1,
+                        parseInt(m[3], 10),
+                        hour,
+                        parseInt(m[5], 10)
+                    );
+                },
+            },
+            // "Y-m-d, H:i" => "2025-03-01, 22:48"
+            {
+                regex: /^(\d{4})-(\d{1,2})-(\d{1,2}),\s*(\d{1,2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[1], 10),
+                        parseInt(m[2], 10) - 1,
+                        parseInt(m[3], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10)
+                    ),
+            },
+            // "Y-m-d, H:i:s" => "2025-03-01, 22:48:44"
+            {
+                regex: /^(\d{4})-(\d{1,2})-(\d{1,2}),\s*(\d{1,2}):(\d{2}):(\d{2})$/,
+                process: (m) =>
+                    new Date(
+                        parseInt(m[1], 10),
+                        parseInt(m[2], 10) - 1,
+                        parseInt(m[3], 10),
+                        parseInt(m[4], 10),
+                        parseInt(m[5], 10),
+                        parseInt(m[6], 10)
+                    ),
+            },
+        ];
+
+        // Fonction utilitaire pour convertir un nom de mois en indice (0 pour janvier)
+        function parseMonth(monthStr) {
+            const m = monthStr.toLowerCase();
+            const months = {
+                jan: 0,
+                january: 0,
+                janv: 0,
+                feb: 1,
+                february: 1,
+                févr: 1,
+                mar: 2,
+                march: 2,
+                mars: 2,
+                apr: 3,
+                april: 3,
+                avr: 3,
+                may: 4,
+                mai: 4,
+                jun: 5,
+                june: 5,
+                juin: 5,
+                jul: 6,
+                july: 6,
+                juil: 6,
+                aug: 7,
+                august: 7,
+                août: 7,
+                sep: 8,
+                sept: 8,
+                september: 8,
+                oct: 9,
+                october: 9,
+                nov: 10,
+                november: 10,
+                dec: 11,
+                december: 11,
+                déc: 11,
+                decembre: 11,
+            };
+            return months[m] !== undefined ? months[m] : 0;
+        }
+
+        // Parcours des patterns pour tenter une correspondance
+        for (let { regex, process } of patterns) {
+            const match = dateStr.match(regex);
+            if (match) {
+                return process(match);
+            }
+        }
+        // Dernier recours : utiliser le constructeur natif
+        const parsed = new Date(dateStr);
+        return isNaN(parsed.getTime()) ? new Date(NaN) : parsed;
+    }
+
+    const getDateAndParse = (el) => {
+        const date = el.querySelector("var[title*='date']");
+        if (!date) return null;
+        const text = date.textContent;
+        const obj = {
+            text: text,
+            timestamp: parseUserDate(text),
+        };
         return obj;
     };
 
@@ -986,27 +1447,6 @@
         };
     }
 
-    const extractContactImages = (el) => {
-        const contacts = el.querySelectorAll('[title^="contact"]');
-        const obj = {};
-        contacts.forEach((contact) => {
-            const type = contact.title;
-            const link = contact.querySelector("a");
-            const img = contact.querySelector("img");
-
-            if (link && img) {
-                obj[type] = {
-                    link_url: link.href,
-                    link_title: link.title,
-                    img_url: img.src,
-                    img_alt: img.alt,
-                    img_element: img,
-                };
-            }
-        });
-        return obj;
-    };
-
     const extractMember = (member) => {
         const basicVariables = [
             "avatar",
@@ -1018,7 +1458,7 @@
         ];
         const memberObj = {
             ...getBasicVariableInnerHTML(member, basicVariables),
-            ...extractContactImages(member),
+            contacts: extractLinkAndImage(member, "contact"),
         };
 
         return memberObj;
@@ -1028,31 +1468,162 @@
         const data = {
             page: {},
             pagination: extractPagination(template),
-            members: [],
+            users: [],
         };
 
         template.querySelectorAll(".ref_member").forEach((member) => {
-            data["members"].push(extractMember(member));
+            data["users"].push(extractMember(member));
         });
 
         return data;
     }
 
+    const extractBreadcrumbs = (el) => {
+        const breadcrumbObj = [];
+        if (!el) return breadcrumbObj;
+        const breadcrumbs = el.querySelectorAll("a");
+        breadcrumbs.forEach((breadcrumb) => {
+            breadcrumbObj.push({
+                text: breadcrumb.textContent,
+                type: get_res_type(breadcrumb.href),
+                url: breadcrumb.href,
+            });
+        });
+        return breadcrumbObj;
+    };
+
+    const extractProfileFieldsContent = (field) => {
+        return field.querySelector(".content").innerHTML;
+    };
+
+    const extractAwards = (post) => {
+        const awards = post.querySelectorAll("[title='poster_awards'] .award");
+        const awardsArr = [];
+        awards.forEach((award) => {
+            const imgUrl = award.style
+                .getPropertyValue("--award-image")
+                .replace(/url\((['"])?(.*?)\1\)/gi, "$2");
+            const tooltip = award.querySelector(".award_tooltiptext");
+            const titleText =
+                tooltip
+                    .querySelector(".award_tooltiptext_title")
+                    ?.textContent.trim() || "";
+            const descriptionText = Array.from(tooltip.childNodes)
+                .filter(
+                    (node) =>
+                        node.nodeType === Node.TEXT_NODE &&
+                        node.textContent.trim() !== ""
+                )
+                .map((node) => node.textContent.trim())
+                .join(" ");
+            const img = document.createElement("img");
+            img.src = imgUrl;
+            awardsArr.push({
+                img: {
+                    src: imgUrl,
+                    element: img,
+                },
+                title: titleText,
+                description: descriptionText || "",
+            });
+        });
+        return awardsArr;
+    };
+
+    const extractProfileFields = (post) => {
+        const fields = post.querySelectorAll("[title='poster_field']");
+        const fieldObj = {};
+        fields.forEach((field) => {
+            const label = field
+                .querySelector(".label")
+                .textContent.replace(":", "")
+                .trim();
+            const color = field.querySelector("span[style]").style.color || null;
+            const content = extractProfileFieldsContent(field);
+            fieldObj[slugify(label)] = {
+                label,
+                color,
+                content,
+            };
+        });
+        return fieldObj;
+    };
+
+    const extractParticipants = (post) => {
+        const participants = post.querySelector("[title='participants']");
+        if (!participants) return null;
+        const participantsArr = [];
+        participants.querySelectorAll(".poster").forEach((participant) => {
+            const avatarUrl = participant.style
+                .getPropertyValue("--poster-avatar")
+                .replace(/url\((['"])?(.*?)\1\)/gi, "$2");
+            const img = document.createElement("img");
+            img.src = avatarUrl;
+            participantsArr.push({
+                name: participant.title,
+                avatar: {
+                    src: avatarUrl,
+                    element: img,
+                },
+                url: participant.querySelector("a").href,
+            });
+        });
+        return {
+            users: participantsArr,
+            count: getNumbersFromText(
+                participants.querySelector(".poster-count").textContent
+            ),
+        };
+    };
+
+    const extractPoster = (post) => {
+        const basicVariables = ["poster_uid"];
+        const posterObj = {
+            ...getBasicVariableInnerHTML(post, basicVariables),
+            rank: {
+                text: getStrictText(post.querySelector("[title='poster_rank']")),
+                img: getStrictImg(post.querySelector("[title='poster_rankImg']")),
+            },
+            awards: extractAwards(post),
+            avatar: getStrictImg(post.querySelector("[title='poster_avatar']")),
+            fields: extractProfileFields(post),
+            //TODO: RPG & Contact customs, vote & attachments, like
+        };
+        posterObj["url"] = `/u${posterObj.uid}`;
+        return posterObj;
+    };
+
     const extractPost = (post) => {
-        const basicVariables = ["id", "body"];
+        const basicVariables = [
+            "id",
+            "body",
+            "tid",
+            "pid",
+            "signature",
+            "url",
+            "subject",
+        ];
 
         const postObj = {
             ...getBasicVariableInnerHTML(post, basicVariables),
+            date: getDateAndParse(post),
+            contacts: extractLinkAndImage(post, "contact"),
+            actions: extractLinkAndImage(post, "action"),
+            poster: extractPoster(post),
         };
-
-        console.log(postObj);
 
         return postObj;
     };
 
     function viewtopic_body(template) {
         const data = {
-            page: {},
+            page: {
+                navigation: extractBreadcrumbs(
+                    template.querySelector('var[title="navigation"]')
+                ),
+                actions: extractLinkAndImage(template, "paction"),
+                participants: extractParticipants(template),
+            },
             pagination: extractPagination(template),
             posts: [],
         };
@@ -1065,6 +1636,124 @@
     }
 
     const ENABLED_TEMPLATES = ["index_box", "memberlist_body", "viewtopic_body"];
+
+    // Fonction qui crée un nœud de dump interactif pour une propriété donnée.
+    function createDumpNode(key, value, visited) {
+        const container = document.createElement("div");
+        container.style.marginLeft = "20px"; // Indentation
+        container.style.whiteSpace = "pre-wrap"; // Activer les retours à la ligne
+
+        // Si la valeur est un objet HTML, on le traite comme une valeur primitive.
+        if (value instanceof HTMLElement) {
+            let displayValue = escapeHTML(value.outerHTML);
+            if (displayValue.length > 300) {
+                displayValue = displayValue.substring(0, 300) + "…";
+            }
+            container.innerHTML = `<strong class="dump-key">${escapeHTML(
+            key
+        )}</strong>: <span class="dump-value">${displayValue}</span> <em class="dump-type">(HTMLElement)</em>`;
+            return container;
+        }
+
+        // Traitement des objets (et tableaux) non null
+        if (typeof value === "object" && value !== null) {
+            // Détection des références circulaires
+            if (visited.has(value)) {
+                container.innerHTML = `<strong class="dump-key">${escapeHTML(
+                key
+            )}</strong>: [Circular]`;
+                return container;
+            }
+            visited.add(value);
+
+            const isArray = Array.isArray(value);
+            // Ligne de titre avec l'indicateur pour le toggle
+            const header = document.createElement("div");
+            header.style.cursor = "pointer";
+            header.style.userSelect = "none";
+
+            const toggleIndicator = document.createElement("span");
+            toggleIndicator.textContent = "▶️"; // fermé par défaut
+            toggleIndicator.style.display = "inline-block";
+            toggleIndicator.style.width = "1em";
+            toggleIndicator.className = "toggle-indicator";
+            header.appendChild(toggleIndicator);
+
+            header.insertAdjacentHTML(
+                "beforeend",
+                ` <strong class="dump-key">${escapeHTML(
+                key
+            )}</strong>: <em class="dump-type">${
+                isArray ? "Array(" + value.length + ")" : "Object"
+            }</rm>`
+            );
+            container.appendChild(header);
+
+            // Conteneur des sous-éléments (caché par défaut)
+            const childContainer = document.createElement("div");
+            childContainer.style.display = "none";
+
+            // Pour chaque propriété de l'objet, on crée un nœud enfant
+            for (let prop in value) {
+                if (Object.prototype.hasOwnProperty.call(value, prop)) {
+                    childContainer.appendChild(
+                        createDumpNode(prop, value[prop], visited)
+                    );
+                }
+            }
+            container.appendChild(childContainer);
+
+            // Au clic, on bascule l'affichage des sous-éléments
+            header.addEventListener("click", function () {
+                if (childContainer.style.display === "none") {
+                    childContainer.style.display = "block";
+                    toggleIndicator.textContent = "🔽";
+                } else {
+                    childContainer.style.display = "none";
+                    toggleIndicator.textContent = "▶️";
+                }
+            });
+        } else {
+            // Pour les valeurs primitives
+            let displayValue = value;
+            if (typeof value === "string") {
+                displayValue = escapeHTML(value);
+                if (displayValue.length > 300) {
+                    displayValue = displayValue.substring(0, 300) + "…";
+                }
+            }
+            container.innerHTML = `<strong class="dump-key">${escapeHTML(
+            key
+        )}</strong>: <span class="dump-value">${displayValue}</span> <em class="dump-type">(${typeof value})</em>`;
+        }
+
+        return container;
+    }
+
+    // Fonction principale qui crée un affichage interactif (tree view) pour un objet complet.
+    function interactiveVarDump(obj) {
+        const container = document.createElement("div");
+        container.style.fontFamily = "monospace";
+        container.style.whiteSpace = "pre-wrap"; // Permettre le retour à la ligne
+
+        // Utilisation d'un WeakSet pour gérer les références circulaires
+        const visited = new WeakSet();
+
+        // Si l'objet n'est pas complexe, on affiche simplement sa valeur
+        if (typeof obj !== "object" || obj === null) {
+            container.textContent = String(obj) + " (" + typeof obj + ")";
+            return container;
+        }
+
+        // Pour chaque propriété de l'objet, on ajoute un nœud interactif
+        for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+                container.appendChild(createDumpNode(key, obj[key], visited));
+            }
+        }
+
+        return container;
+    }
 
     const isTemplateSupported = (template_name) => {
         return ENABLED_TEMPLATES.includes(template_name);
@@ -1087,6 +1776,8 @@
             case "viewtopic_body":
                 data = viewtopic_body(element);
                 break;
+            default:
+                return;
         }
 
         return data;
@@ -1094,6 +1785,7 @@
 
     const DEFAULT_OPTIONS = {
         sync: true,
+        dev: true,
     };
 
     window.$honey = {};
@@ -1102,11 +1794,13 @@
         this.options = { ...DEFAULT_OPTIONS, ...options };
 
         this.init();
+        this.initUI();
     };
 
     Component.prototype.init = function () {
         ENABLED_TEMPLATES.forEach((template_name) => {
             const data = TemplateData(template_name);
+
             if (!data) return;
 
             if (
@@ -1119,12 +1813,54 @@
             window.$honey[template_name] = this.options.sync
                 ? potion.sync(template_name, data)
                 : potion.render(template_name, data);
-            console.log(window.$honey[template_name]);
         });
     };
 
-    Component.prototype.render = function (template, data) {};
+    Component.prototype.initUI = function () {
+        if (this.options.dev) {
+            const infoButton = document.createElement("button");
+            infoButton.textContent = "Info";
+
+            // Création de la zone d'affichage (overlay) pour le varDump
+            const dumpOverlay = document.createElement("div");
+            dumpOverlay.style.position = "fixed";
+            dumpOverlay.style.top = "10%";
+            dumpOverlay.style.left = "10%";
+            dumpOverlay.style.width = "80%";
+            dumpOverlay.style.height = "80%";
+            dumpOverlay.style.backgroundColor = "#f9f9f9";
+            dumpOverlay.style.border = "1px solid #ccc";
+            dumpOverlay.style.padding = "10px";
+            dumpOverlay.style.overflow = "auto";
+            dumpOverlay.style.zIndex = 1000;
+            dumpOverlay.style.boxShadow = "0 0 10px rgba(0,0,0,0.5)";
+            dumpOverlay.style.display = "none"; // Masquée par défaut
+            dumpOverlay.style.whiteSpace = "pre-wrap";
+
+            // Bouton "Fermer" pour masquer l'overlay
+            const closeButton = document.createElement("button");
+            closeButton.textContent = "Fermer";
+            closeButton.style.marginBottom = "10px";
+            closeButton.addEventListener("click", () => {
+                dumpOverlay.style.display = "none";
+            });
+            dumpOverlay.appendChild(closeButton);
+
+            // On ajoute l'interactive varDump de window.$honey dans l'overlay
+            dumpOverlay.appendChild(interactiveVarDump(window.$honey));
+
+            // On ajoute le bouton et l'overlay au body
+            document.body.appendChild(infoButton);
+            document.body.appendChild(dumpOverlay);
+
+            // Au clic sur le bouton "Info", on bascule l'affichage de l'overlay
+            infoButton.addEventListener("click", () => {
+                dumpOverlay.style.display =
+                    dumpOverlay.style.display === "none" ? "block" : "none";
+            });
+        }
+    };
 
     return Component;
 
-}));
+})();
