@@ -8,7 +8,7 @@ import {
     getNumbersFromText,
 } from "../utils";
 import { extractPagination } from "../general/pagination";
-import { extractBreadcrumbs } from "../general/breadcrumbs";
+/* import { extractBreadcrumbs } from "../general/breadcrumbs"; */
 
 const extractProfileFieldsContent = (field) => {
     return field.querySelector(".content").innerHTML;
@@ -136,9 +136,9 @@ const extractPost = (post) => {
 export function viewtopic_body(template) {
     const data = {
         page: {
-            navigation: extractBreadcrumbs(
+            /* navigation: extractBreadcrumbs(
                 template.querySelector('var[title="navigation"]')
-            ),
+            ), */
             actions: extractLinkAndImage(template, "paction"),
             participants: extractParticipants(template),
         },

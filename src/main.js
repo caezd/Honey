@@ -159,7 +159,10 @@ const DEFAULT_OPTIONS = {
 
 window.$honey = {};
 
-var Component = function (options) {
+var Component = function (options = {}) {
+    if (!(this instanceof Component)) {
+        return new Component(options);
+    }
     this.options = { ...DEFAULT_OPTIONS, ...options };
 
     this.init();
@@ -168,7 +171,7 @@ var Component = function (options) {
 
 Component.prototype.init = function () {
     ENABLED_TEMPLATES.forEach((template_name) => {
-        const data = TemplateData(template_name);
+        let data = TemplateData(template_name);
 
         if (!data) return;
 

@@ -5,7 +5,8 @@
     "main": "index.js",
     "scripts": {
         "watch": "rollup -c -w",
-        "serve": "http-server ./dist/"
+        "dev": "concurrently -k \"rollup -c -w\" \"http-server dist -c-1 --cors\"",
+        "serve": "http-server ./dist/ --cors"
     },
     "author": "",
     "license": "ISC",
@@ -13,10 +14,11 @@
         "@rollup/plugin-commonjs": "^26.0.3",
         "@rollup/plugin-node-resolve": "^13.3.0",
         "@rollup/plugin-terser": "^0.4.4",
+        "concurrently": "^9.2.1",
         "rollup-plugin-node-resolve": "^5.2.0",
         "rollup-plugin-peer-deps-external": "^2.2.4"
     },
     "dependencies": {
-        "@poumon/potion": "^1.4.10"
+        "@poumon/potion": "^1.6.0"
     }
 }

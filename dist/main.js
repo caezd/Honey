@@ -57,14 +57,207 @@ var Honey = (function () {
         return dataLookup;
     });
 
+    /**
+     * Filtres pour string
+     */
+
     addFilter("uppercase", (value) =>
         typeof value === "string" ? value.toUpperCase() : value
     );
-    addFilter("uppercase", (value) =>
+
+    addFilter("lowercase", (value) =>
         typeof value === "string" ? value.toLowerCase() : value
     );
+
+    addFilter("capitalize", (value) =>
+        typeof value === "string"
+            ? value.charAt(0).toUpperCase() + value.slice(1)
+            : value
+    );
+
+    addFilter("truncate", (value, data, template, length = 50, ellipsis = "") =>
+        typeof value === "string" && value.length > length
+            ? value.slice(0, length) + ellipsis
+            : value
+    );
+
     addFilter("trim", (value) =>
         typeof value === "string" ? value.trim() : value
+    );
+
+    addFilter("lstrip", (value) =>
+        typeof value === "string" ? value.replace(/^\s+/, "") : value
+    );
+
+    addFilter("rstrip", (value) =>
+        typeof value === "string" ? value.replace(/\s+$/, "") : value
+    );
+
+    addFilter("append", (value, data, template, suffix) =>
+        typeof value === "string" ? value + suffix : value
+    );
+
+    addFilter("default", (value, data, template, defaultValue) =>
+        value === null || value === undefined || value === "" ? defaultValue : value
+    );
+
+    addFilter("prepend", (value, data, template, prefix) =>
+        typeof value === "string" ? prefix + value : value
+    );
+
+    addFilter("remove", (value, data, template, substring) =>
+        typeof value === "string" ? value.split(substring).join("") : value
+    );
+
+    addFilter("remove_first", (value, data, template, substring) =>
+        typeof value === "string" ? value.replace(substring, "") : value
+    );
+
+    addFilter("replace", (value, data, template, search, replacement) =>
+        typeof value === "string" ? value.split(search).join(replacement) : value
+    );
+
+    addFilter("replace_first", (value, data, template, search, replacement) =>
+        typeof value === "string" ? value.replace(search, replacement) : value
+    );
+
+    addFilter("split", (value, data, template, delimiter) =>
+        typeof value === "string" ? value.split(delimiter) : value
+    );
+
+    addFilter("strip_html", (value) =>
+        typeof value === "string" ? value.replace(/<[^>]+>/g, "") : value
+    );
+
+    addFilter("url_decode", (value) =>
+        typeof value === "string" ? decodeURIComponent(value) : value
+    );
+
+    addFilter("url_encode", (value) =>
+        typeof value === "string" ? encodeURIComponent(value) : value
+    );
+
+    /**
+     * Filtres pour nombre
+     */
+
+    addFilter("abs", (value) =>
+        typeof value === "number" ? Math.abs(value) : value
+    );
+
+    addFilter("at_least", (value, data, template, min) =>
+        typeof value === "number" ? Math.max(value, Number(min)) : value
+    );
+
+    addFilter("at_most", (value, data, template, max) =>
+        typeof value === "number" ? Math.min(value, Number(max)) : value
+    );
+
+    addFilter("ceil", (value) =>
+        typeof value === "number" ? Math.ceil(value) : value
+    );
+
+    addFilter("floor", (value) =>
+        typeof value === "number" ? Math.floor(value) : value
+    );
+
+    addFilter("divided_by", (value, data, template, divisor) =>
+        typeof Number(value) === "number" && Number(divisor) !== 0
+            ? value / Number(divisor)
+            : value
+    );
+
+    addFilter("minus", (value, data, template, number) =>
+        typeof value === "number" ? value - Number(number) : value
+    );
+
+    addFilter("modulo", (value, data, template, divisor) =>
+        typeof value === "number" && Number(divisor) !== 0
+            ? value % Number(divisor)
+            : value
+    );
+
+    addFilter("plus", (value, data, template, number) =>
+        typeof value === "number" ? value + Number(number) : value
+    );
+
+    addFilter("round", (value, data, template, precision) => {
+        if (typeof value === "number") {
+            precision = Number(precision) || 0;
+            const factor = Math.pow(10, precision);
+            return Math.round(value * factor) / factor;
+        }
+        return value;
+    });
+    addFilter("times", (value, data, template, multiplier) =>
+        typeof value === "number" ? value * Number(multiplier) : value
+    );
+
+    addFilter("escape", (value) =>
+        typeof value === "string"
+            ? value
+                  .replace(/&/g, "&amp;")
+                  .replace(/</g, "&lt;")
+                  .replace(/>/g, "&gt;")
+                  .replace(/"/g, "&quot;")
+                  .replace(/'/g, "&#39;")
+            : value
+    );
+
+    addFilter("size", (value) => {
+        if (Array.isArray(value)) return value.length;
+        if (typeof value === "string") return value.length;
+        if (typeof value === "object" && value !== null)
+            return Object.keys(value).length;
+        return 0;
+    });
+
+    /**
+     * Filtres pour tableaux
+     */
+    addFilter("compact", (value) =>
+        Array.isArray(value)
+            ? value.filter((item) => item !== null && item !== undefined)
+            : value
+    );
+    addFilter("first", (value) => {
+        if (Array.isArray(value)) return value[0];
+        if (typeof value === "string") return value.charAt(0);
+        return value;
+    });
+    addFilter("last", (value) => {
+        if (Array.isArray(value)) return value[value.length - 1];
+        if (typeof value === "string") return value.charAt(value.length - 1);
+        return value;
+    });
+    addFilter("join", (value, data, template, delimiter) =>
+        Array.isArray(value) ? value.join(delimiter || "") : value
+    );
+    addFilter("map", (value, data, template, property) =>
+        Array.isArray(value) ? value.map((item) => item[property]) : value
+    );
+    addFilter("reverse", (value) => {
+        if (Array.isArray(value)) return [...value].reverse();
+        if (typeof value === "string") return value.split("").reverse().join("");
+        return value;
+    });
+    addFilter("slice", (value, data, template, start, length) => {
+        if (typeof value === "string")
+            return value.substring(Number(start), Number(length));
+        if (Array.isArray(value))
+            return value.slice(Number(start), Number(start) + Number(length));
+        return value;
+    });
+    addFilter("sort", (value, data, template, property) => {
+        if (Array.isArray(value)) {
+            return property
+                ? [...value].sort((a, b) => (a[property] > b[property] ? 1 : -1))
+                : [...value].sort();
+        }
+        return value;
+    });
+    addFilter("unique", (value) =>
+        Array.isArray(value) ? [...new Set(value)] : value
     );
 
     /**
@@ -91,7 +284,10 @@ var Honey = (function () {
         return !(el instanceof HTMLUnknownElement);
     }
 
-    const ud = _userdata;
+    const ud =
+        typeof window !== "undefined" && typeof window._userdata !== "undefined"
+            ? window._userdata
+            : {};
 
     /**
      * @module store
@@ -99,14 +295,14 @@ var Honey = (function () {
      */
     const store = {
         user: {
-            name: ud.username,
-            logged_in: Boolean(ud.session_logged_in),
-            level: ud.user_level,
-            id: ud.user_id,
-            posts: ud.user_posts,
-            avatar: ud.avatar,
-            avatar_link: ud.avatar_link,
-            group_color: ud.groupcolor,
+            name: ud.username || null,
+            logged_in: Boolean(ud.session_logged_in || null),
+            level: ud.user_level || null,
+            id: ud.user_id || null,
+            posts: ud.user_posts || 0,
+            avatar: ud.avatar || null,
+            avatar_link: ud.avatar_link || null,
+            group_color: ud.groupcolor || null,
         },
     };
 
@@ -186,6 +382,70 @@ var Honey = (function () {
         return tokens;
     }
 
+    // Fonction pour extraire les templates imbriqués et les protéger
+    function protectNestedTemplates(templateStr) {
+        const nestedTemplates = {};
+        let counter = 0;
+        // On utilise une regex qui capture les balises <template> imbriquées
+        const regex = /<template\b[^>]*>([\s\S]*?)<\/template>/gi;
+        const protectedStr = templateStr.replace(regex, (match) => {
+            const placeholder = `__NESTED_TEMPLATE_${counter}__`;
+            nestedTemplates[placeholder] = match;
+            counter++;
+            return placeholder;
+        });
+        return { protectedStr, nestedTemplates };
+    }
+
+    // Fonction pour restaurer les templates imbriqués après substitution
+    function restoreNestedTemplates(templateStr, nestedTemplates) {
+        for (const placeholder in nestedTemplates) {
+            templateStr = templateStr.replace(
+                placeholder,
+                nestedTemplates[placeholder]
+            );
+        }
+        return templateStr;
+    }
+
+    // Fonction de substitution "protégée"
+    function safeSubstitute(templateStr, data, settings) {
+        // Protéger les templates imbriqués
+        const { protectedStr, nestedTemplates } =
+            protectNestedTemplates(templateStr);
+        // Appliquer la substitution sur le contenu protégé
+        let substituted = substitute(protectedStr, data, settings);
+        // Restaurer les templates imbriqués intacts
+        substituted = restoreNestedTemplates(substituted, nestedTemplates);
+        return substituted;
+    }
+
+    function parseFilterArguments(argString) {
+        // On commence par trimper l'ensemble de la chaîne d'arguments
+        argString = argString.trim();
+        const args = [];
+        // Ce regex capture :
+        //  • un argument entre guillemets doubles : "([^"]*)"
+        //  • ou entre guillemets simples : '([^']*)'
+        //  • ou un argument non cité : ([^,]+)
+        // suivis d'une virgule optionnelle et d'espaces
+        const regex = /(?:"([^"]*)"|'([^']*)'|([^,]+))(?:,\s*)?/g;
+        let match;
+        while ((match = regex.exec(argString)) !== null) {
+            if (match[1] !== undefined) {
+                // Argument entre guillemets doubles (le groupe 1 ne contient pas les quotes)
+                args.push(match[1]);
+            } else if (match[2] !== undefined) {
+                // Argument entre guillemets simples
+                args.push(match[2]);
+            } else if (match[3] !== undefined) {
+                // Argument non cité, on applique trim
+                args.push(match[3].trim());
+            }
+        }
+        return args;
+    }
+
     /**
      * Effectue la substitution sur un template en utilisant les tokens pré-analyzés,
      * et gère les blocs conditionnels et les boucles.
@@ -247,11 +507,21 @@ var Honey = (function () {
 
                 // Si des filtres additionnels sont présents, on les applique successivement
                 for (let i = 1; i < parts.length; i++) {
+                    let filterSpec = parts[i]; // ex. "truncate: 100, \"…\"" ou "join: ', '"
+                    let filterName = filterSpec;
+                    let filterArgs = [];
+                    if (filterSpec.indexOf(":") !== -1) {
+                        let [name, argString] = filterSpec.split(":", 2);
+                        filterName = name.trim();
+                        // Utilisation de la fonction dédiée pour parser les arguments
+                        filterArgs = parseFilterArguments(argString);
+                    }
                     substituted = applyFilter(
-                        parts[i],
+                        filterName,
                         substituted,
                         data,
-                        template
+                        template,
+                        ...filterArgs
                     );
                 }
 
@@ -630,7 +900,7 @@ var Honey = (function () {
         }
         template = applyFilter("template", template, data);
         if (template && data !== undefined) {
-            template = substitute(template, data, settings);
+            template = safeSubstitute(template, data, settings);
         }
         return applyFilter("templateAfter", template, data);
     }
@@ -786,12 +1056,6 @@ var Honey = (function () {
 
     const getNumbersFromText = (text) => {
         return text.replace(/\D/g, "");
-    };
-
-    const get_res_type = (p) => {
-        var m = p.match(/\/([tfc])[1-9][0-9]*/);
-        if (!m) return "";
-        return m[1];
     };
 
     const get_res_id = (p) => {
@@ -1478,19 +1742,7 @@ var Honey = (function () {
         return data;
     }
 
-    const extractBreadcrumbs = (el) => {
-        const breadcrumbObj = [];
-        if (!el) return breadcrumbObj;
-        const breadcrumbs = el.querySelectorAll("a");
-        breadcrumbs.forEach((breadcrumb) => {
-            breadcrumbObj.push({
-                text: breadcrumb.textContent,
-                type: get_res_type(breadcrumb.href),
-                url: breadcrumb.href,
-            });
-        });
-        return breadcrumbObj;
-    };
+    /* import { extractBreadcrumbs } from "../general/breadcrumbs"; */
 
     const extractProfileFieldsContent = (field) => {
         return field.querySelector(".content").innerHTML;
@@ -1618,9 +1870,9 @@ var Honey = (function () {
     function viewtopic_body(template) {
         const data = {
             page: {
-                navigation: extractBreadcrumbs(
+                /* navigation: extractBreadcrumbs(
                     template.querySelector('var[title="navigation"]')
-                ),
+                ), */
                 actions: extractLinkAndImage(template, "paction"),
                 participants: extractParticipants(template),
             },
@@ -1790,7 +2042,10 @@ var Honey = (function () {
 
     window.$honey = {};
 
-    var Component = function (options) {
+    var Component = function (options = {}) {
+        if (!(this instanceof Component)) {
+            return new Component(options);
+        }
         this.options = { ...DEFAULT_OPTIONS, ...options };
 
         this.init();
@@ -1799,7 +2054,7 @@ var Honey = (function () {
 
     Component.prototype.init = function () {
         ENABLED_TEMPLATES.forEach((template_name) => {
-            const data = TemplateData(template_name);
+            let data = TemplateData(template_name);
 
             if (!data) return;
 
